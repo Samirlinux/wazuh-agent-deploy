@@ -1,0 +1,54 @@
+#!/bin/bash
+# ==============================================================
+# Wazuh Agent Deployment Script (RPM/AlmaLinux version)
+# Author: Eng. Samir Abou El-Kheir - DevOps Engineer, Megatrust Group
+# Purpose: Install and register Wazuh Agent (v4.9.2-1) on AlmaLinux/RHEL servers
+# ==============================================================
+
+set -e
+
+WAZUH_MANAGER_IP="188.40.242.114"
+WAZUH_VERSION="4.9.2-1"
+
+echo ">>> Importing Wazuh GPG key..."
+rpm --import https://packages.wazuh.com/key/GPG-KEY-WAZUH
+
+echo ">>> Adding Wazuh repository..."
+cat > /etc/yum.repos.d/wazuh.repo << EOF
+[wazuh]
+gpgcheck=1
+gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
+enabled=1
+name=EL-\$releasever - Wazuh
+baseurl=https://packages.wazuh.com/4.x/yum/
+protect=1
+EOF
+
+echo ">>> Refreshing package cache..."
+yum clean all
+yum makecache
+
+echo ">>> Ensuring wazuh user/group exist (known issue on some AlmaLinux servers)..."
+groupadd wazuh 2>/dev/null || true
+useradd -g wazuh -G wazuh -d /var/ossec -s /sbin/nologin wazuh 2>/dev/null || true
+
+echo ">>> Installing Wazuh Agent version $WAZUH_VERSION..."
+WAZUH_MANAGER="$WAZUH_MANAGER_IP" yum install -y wazuh-agent-$WAZUH_VERSION
+
+echo ">>> Fixing ownership..."
+chown -R wazuh:wazuh /var/ossec
+
+echo ">>> Locking package version to prevent auto-updates..."
+yum install -y yum-plugin-versionlock
+yum versionlock wazuh-agent
+
+echo ">>> Enabling and starting service..."
+systemctl daemon-reload
+systemctl enable wazuh-agent
+systemctl start wazuh-agent
+
+sleep 5
+echo ">>> Last log lines (verify connection):"
+tail -15 /var/ossec/logs/ossec.log
+
+echo ">>> Done. Check the dashboard to confirm this agent shows as Active."
