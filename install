@@ -1,0 +1,38 @@
+#!/bin/bash
+# ==============================================================
+# Wazuh Agent Deployment Script
+# Author: Eng. Samir Abou El-Kheir - DevOps Engineer, Megatrust Group
+# Purpose: Install and register Wazuh Agent (v4.9.2-1) on Ubuntu/Debian servers
+# Note: Installs Wazuh agent only - does not touch any other package
+# ==============================================================
+
+set -e
+
+WAZUH_MANAGER_IP="188.40.242.114"
+WAZUH_VERSION="4.9.2-1"
+
+echo ">>> Adding Wazuh repository (isolated, no impact on other repos)..."
+mkdir -p /etc/apt/keyrings
+curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import
+chmod 644 /usr/share/keyrings/wazuh.gpg
+echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee /etc/apt/sources.list.d/wazuh.list
+
+echo ">>> Updating Wazuh repository index only..."
+apt-get update -o Dir::Etc::sourcelist="sources.list.d/wazuh.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
+
+echo ">>> Installing Wazuh Agent version $WAZUH_VERSION..."
+WAZUH_MANAGER="$WAZUH_MANAGER_IP" apt-get install -y --no-upgrade wazuh-agent=$WAZUH_VERSION
+
+echo ">>> Locking package version to prevent auto-updates..."
+apt-mark hold wazuh-agent
+
+echo ">>> Enabling and starting service..."
+systemctl daemon-reload
+systemctl enable wazuh-agent
+systemctl start wazuh-agent
+
+sleep 5
+echo ">>> Last log lines (verify connection):"
+tail -15 /var/ossec/logs/ossec.log
+
+echo ">>> Done. Check the dashboard to confirm this agent shows as Active."
